@@ -1,0 +1,26 @@
+{
+    "name": "daxpay/open-sdk",
+    "description": "DaxPay 开放支付平台 PHP SDK（核心支付子集：pay / close / refund / query / 回调验签）",
+    "type": "library",
+    "keywords": ["daxpay", "payment", "sdk", "alipay", "wechat"],
+    "license": "LGPL-3.0-only",
+    "require": {
+        "php": ">=7.4",
+        "ext-json": "*",
+        "ext-openssl": "*",
+        "ext-mbstring": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "DaxPay\\OpenSdk\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "DaxPay\\OpenSdk\\Tests\\": "tests/"
+        }
+    }
+}
