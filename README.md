@@ -18,7 +18,7 @@ DaxPay 开放支付平台 PHP SDK，封装支付下单、关闭、退款、订�
 ```json
 {
     "repositories": [
-        { "type": "vcs", "url": "https://github.com/daxpay/daxpay-open-sdk-php.git" }
+        { "type": "vcs", "url": "https://github.com/opendaxpay/dax-pay-sdk-php.git" }
     ],
     "require": {
         "daxpay/open-sdk": "dev-main"
@@ -59,13 +59,13 @@ $result = $client->pay([
 // $ok = $client->verifyNotice($rawBody);
 ```
 
-> 完整可运行示例见 `examples/`（实现中）。
+> 完整可运行示例见 [`examples/pay.php`](examples/pay.php)。
 
-## 契约文档
+## 接口文档
 
-- 接口契约：[`daxpay-open/_doc/design/sdk-contract.md`](../../dax-pay-open/_doc/design/sdk-contract.md)
-- 黄金测试向量：[`sdk-test-vectors.md`](../../dax-pay-open/_doc/design/sdk-test-vectors.md)
+- [接入准备](https://doc.open.daxpay.cn/api/getting-started) · [签名规则](https://doc.open.daxpay.cn/api/signature)
+- 黄金测试向量：见 [`tests/GoldenVectorTest.php`](tests/GoldenVectorTest.php)（与后端签名契约同源断言）
 
 ## License
 
-LGPL-3.0，与主仓库 [DaxPay Open](../../dax-pay-open) 同协议。
+LGPL-3.0，与主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 同协议。
