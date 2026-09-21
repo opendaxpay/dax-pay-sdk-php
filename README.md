@@ -2,7 +2,7 @@
 
 DaxPay 开放支付平台 PHP SDK，封装支付、退款、转账、分账、网关共 15 个开放接口与回调验签。
 
-> **适配 DaxPay Open ≥ 1.0** · **PHP 7.4+** · LGPL-3.0 · 零第三方依赖（ext-openssl / ext-json）
+> **适配 DaxPay Open ≥ 1.0** · **PHP 7.4+** · Apache-2.0 · 零第三方依赖（ext-openssl / ext-json）
 
 ## 功能
 
@@ -151,4 +151,4 @@ $client->alloc(['bizAllocNo' => 'AL_001', 'tradeNo' => $result['data']['tradeNo'
 
 ## License
 
-LGPL-3.0，与主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 同协议。
+Apache-2.0，可自由用于商业项目与闭源集成，协议全文见 [LICENSE](LICENSE)。主仓库 [DaxPay Open](https://gitee.com/dromara/dax-pay) 核心为 LGPL-3.0-or-later，本 SDK 作为独立仓按 Apache-2.0 单独发布。
