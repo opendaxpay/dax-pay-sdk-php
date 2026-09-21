@@ -138,4 +138,28 @@ PEM;
         self::assertSame($expectedSign, $sign);
         self::assertTrue(RsaUtil::verify($signStr, $sign, $this->publicKey()));
     }
+
+    /**
+     * PEM 解析校验（联调 demo 保存配置时用）：
+     * 合法 PEM 通过、格式非法/内容损坏/空串一律不通过（避免无效密钥进入配置后才在交易时暴露）
+     */
+    public function testPemValidation(): void
+    {
+        self::assertTrue(RsaUtil::isValidPrivateKey($this->privateKey()));
+        self::assertTrue(RsaUtil::isValidPublicKey($this->publicKey()));
+
+        // 空串与随机文本
+        self::assertFalse(RsaUtil::isValidPrivateKey(''));
+        self::assertFalse(RsaUtil::isValidPublicKey(''));
+        self::assertFalse(RsaUtil::isValidPrivateKey('not-a-pem'));
+        self::assertFalse(RsaUtil::isValidPublicKey('not-a-pem'));
+
+        // 头尾正确但 base64 体损坏
+        $broken = "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----";
+        self::assertFalse(RsaUtil::isValidPrivateKey($broken));
+
+        // 公私钥两者必须严格区分，不能互相通过
+        self::assertFalse(RsaUtil::isValidPrivateKey($this->publicKey()));
+        self::assertFalse(RsaUtil::isValidPublicKey($this->privateKey()));
+    }
 }

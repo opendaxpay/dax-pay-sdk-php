@@ -29,4 +29,21 @@ class RsaUtil
         $result = openssl_verify($data, base64_decode($signB64), $publicKeyPem, \OPENSSL_ALGO_SHA256);
         return $result === 1;
     }
+
+    /**
+     * 校验 PKCS#8 私钥 PEM 是否可解析（联调 demo 保存配置时即时反馈格式错误）
+     * 只做解析验证，不保留返回的密钥资源
+     */
+    public static function isValidPrivateKey(string $privateKeyPem): bool
+    {
+        return @openssl_pkey_get_private($privateKeyPem) !== false;
+    }
+
+    /**
+     * 校验 X.509 公钥 PEM 是否可解析（联调 demo 保存配置时即时反馈格式错误）
+     */
+    public static function isValidPublicKey(string $publicKeyPem): bool
+    {
+        return @openssl_pkey_get_public($publicKeyPem) !== false;
+    }
 }
