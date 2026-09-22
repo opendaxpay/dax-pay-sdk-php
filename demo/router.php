@@ -12,6 +12,8 @@ declare(strict_types=1);
  * - `GET /`、`/index.html` 调试页（readfile 直接输出 demo/index.html）
  * - `GET|POST /demo/config` 连接配置：页面弹窗内填写服务地址/商户号/密钥，配置只存内存**不落盘**
  * - `POST /demo/ping` 连通性自检：服务端代调 `GET /unipay/callback/ping` 探针（浏览器直连平台会跨域）
+ * - `POST /demo/signed-ping` 签名链路自检：服务端代调 `POST /unipay/ping` 签名探针（「测试连接」第二段，
+ *   判定当前配置的商户号/应用/商户私钥是否正确、能否发起真实调用）
  * - `POST /demo/{action}` 调 SDK 发起真实请求，回显「签名后请求体 + 平台原始响应 + 响应验签结果」；
  *   支持全部 15 个开放接口，action 取值见 ACTIONS 表
  * - `POST /callback/{pay|refund|transfer|alloc}`（含通用 `/callback`）接收平台异步通知，用平台公钥验签后暂存
@@ -56,7 +58,7 @@ const MAX_CALLBACKS = 200;
 // ------------------------------------------------------------------
 
 /**
- * action → SDK 方法映射表（15 个开放接口），新增接口只需在此登记一行
+ * action → SDK 方法映射表（15 个业务接口 + 签名自检探针），新增接口只需在此登记一行
  * 值同时承担两个用途：取值即「SDK 方法名 + 平台接口路径」，调用 `$client->{$method}($param)`
  */
 const ACTIONS = [
@@ -80,6 +82,8 @@ const ACTIONS = [
     // 网关族
     'gateway-pre-pay' => ['method' => 'gatewayPrePay', 'path' => '/unipay/gateway/pre-pay'],
     'gateway-query' => ['method' => 'gatewayQuery', 'path' => '/unipay/gateway/query'],
+    // 自检族：探针非 0 码在 handleTrade 转成异常，与其它接口的失败回显路径一致（完整诊断走 /demo/signed-ping）
+    'signed-ping' => ['method' => 'signedPing', 'path' => '/unipay/ping'],
 ];
 
 // ------------------------------------------------------------------
@@ -123,6 +127,11 @@ try {
     // 连通性自检：服务端代调平台探针（浏览器直连平台地址会跨域，故由本服务中转）
     if ($method === 'POST' && $path === '/demo/ping') {
         handlePing();
+        return true;
+    }
+    // 签名链路自检：服务端代调签名自检探针 POST /unipay/ping（「测试连接」第二段，须排在 /demo/* 通配之前）
+    if ($method === 'POST' && $path === '/demo/signed-ping') {
+        handleSignedPing();
         return true;
     }
     // 交易调试（经 SDK 真实调用链）
@@ -254,6 +263,86 @@ function handlePing(): void
 }
 
 // ------------------------------------------------------------------
+// /demo/signed-ping 签名链路自检（服务端中转，规避浏览器跨域）
+// ------------------------------------------------------------------
+
+/**
+ * 代调签名自检探针 `POST /unipay/ping`，供页面「测试连接」第二段使用：
+ * 判定当前配置的商户号/应用/商户私钥/签名串构造是否正确、能否发起真实调用
+ */
+function handleSignedPing(): void
+{
+    $cfg = state()['config'];
+    $result = ['serviceUrl' => rtrim((string) $cfg['serviceUrl'], '/')];
+    $begin = microtime(true);
+    $privateBlank = $cfg['privateKey'] === null || $cfg['privateKey'] === '';
+    $publicBlank = $cfg['publicKey'] === null || $cfg['publicKey'] === '';
+    if ($privateBlank || $publicBlank) {
+        $result['success'] = false;
+        $result['hint'] = $privateBlank
+            ? '尚未配置商户私钥，请先在「连接配置」中填写'
+            : '尚未配置平台公钥（响应无法验签），请先在「连接配置」中填写';
+        jsonOut($result);
+        return;
+    }
+    // observer 捕获发出报文与原始响应，供页面比对签名串（发出 JSON vs 服务端待签串）
+    $captured = [null, null];
+    $client = (new Client(buildConfig($cfg)))->setObserver(
+        function (string $signedJson) use (&$captured): void {
+            $captured[0] = $signedJson;
+        },
+        function (string $rawBody) use (&$captured): void {
+            $captured[1] = $rawBody;
+        }
+    );
+    try {
+        $r = $client->signedPing();
+        // 业务码按数值语义比较（字符串 "0" 同样视为成功；缺失/非数值按 -1 处理，与 Client#execute 同口径）
+        $code = $r['code'] ?? -1;
+        $code = is_numeric($code) ? (int) $code : -1;
+        $result['success'] = $code === 0;
+        $result['code'] = $code;
+        $result['msg'] = $r['msg'] ?? '';
+        $result['data'] = $r['data'] ?? null;
+        if ($code !== 0) {
+            $result['hint'] = classifyProbeError($code);
+        }
+    } catch (\Throwable $e) {
+        // 走到异常只会是硬错误：网络不通 / HTTP 非 200 / 响应验签失败（平台公钥问题）
+        $msg = $e->getMessage();
+        $result['success'] = false;
+        $result['error'] = $msg;
+        if (strpos($msg, '响应验签失败') !== false) {
+            $result['hint'] = '平台响应验签失败：请核对「连接配置」中的平台公钥';
+        } elseif (strpos($msg, 'HTTP 404') !== false) {
+            $result['hint'] = '网关未放行「商户开放 API」(/unipay) 接口组，需在部署面板开启';
+        }
+    } finally {
+        $result['requestBody'] = $captured[0];
+        $result['responseBody'] = $captured[1];
+        $result['durationMs'] = (int) round((microtime(true) - $begin) * 1000);
+    }
+    jsonOut($result);
+}
+
+/**
+ * 探针错误码分类提示（对照契约 6.14 诊断表）
+ */
+function classifyProbeError(int $code): string
+{
+    if ($code === 20052) {
+        return '验签失败：商户私钥与平台上配置的公钥不配对，或签名串构造不一致——比对「发出报文」与响应 msg 中的服务端待签串';
+    }
+    if ($code === 10408 || $code === 10409) {
+        return 'Nonce 防重放拦截：请勿复用请求（每次点击都会生成新 nonce）';
+    }
+    if ($code === 10410 || $code === 10411) {
+        return '请求时间超窗：本机时钟偏差过大，或 reqTime 未按 GMT+8 yyyy-MM-dd HH:mm:ss 字面量';
+    }
+    return '商户号/应用类错误（code ' . $code . '）：核对 mchNo 与 appId 是否存在且启用';
+}
+
+// ------------------------------------------------------------------
 // /demo/* 交易调试
 // ------------------------------------------------------------------
 
@@ -297,8 +386,18 @@ function handleTrade(string $action): void
     $begin = microtime(true);
     $error = null;
     try {
-        $method = ACTIONS[$action]['method'];
-        $client->{$method}($param);
+        if ($action === 'signed-ping') {
+            // 自检族：探针非 0 码在此转成异常，与其它接口的失败回显路径一致（完整诊断走 /demo/signed-ping）
+            $r = $client->signedPing($param);
+            $code = $r['code'] ?? -1;
+            $code = is_numeric($code) ? (int) $code : -1;
+            if ($code !== 0) {
+                throw new \RuntimeException('[' . $code . '] ' . (string) ($r['msg'] ?? ''));
+            }
+        } else {
+            $method = ACTIONS[$action]['method'];
+            $client->{$method}($param);
+        }
     } catch (\Throwable $e) {
         // SDK 抛出（业务失败/验签失败/网络异常）也属联调有效结果，回显给页面
         $error = $e->getMessage();

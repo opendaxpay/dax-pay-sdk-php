@@ -59,9 +59,12 @@ class Client
      *
      * @param string $path  平台接口路径（如 /unipay/pay）
      * @param array<string,mixed> $param 请求参数（公共字段 mchNo/appId/reqId/reqTime/nonceStr 缺省自动注入）
+     * @param bool $throwOnBizError 非 0 业务码是否抛异常（默认 true，既有方法行为不变）；
+     *      传 false 时非 0 业务码不抛异常而是原样返回 DaxResult（签名自检探针的职责是报告检查结果，
+     *      失败码/失败消息本身就是有效答案）；响应验签失败**仍抛**（平台公钥配置问题属于硬错误而非探针答案）
      * @return array<string,mixed> DaxResult 关联数组
      */
-    public function execute(string $path, array $param): array
+    public function execute(string $path, array $param, bool $throwOnBizError = true): array
     {
         // 注入公共字段
         $param['mchNo'] = $param['mchNo'] ?? $this->config->getMchNo();
@@ -115,6 +118,11 @@ class Client
             $msg = $result['msg'] ?? '';
             if ($msg === '' || $msg === null) {
                 $msg = $result['message'] ?? '';
+            }
+            if (!$throwOnBizError) {
+                // 非 0 业务码不抛异常而是原样返回 DaxResult（探针诊断路径；msg 已回填兼容值）
+                $result['msg'] = $msg;
+                return $result;
             }
             throw new \RuntimeException('[' . $code . '] ' . $msg);
         }
@@ -396,6 +404,24 @@ class Client
     public function gatewayQuery(array $param): array
     {
         return $this->execute('/unipay/gateway/query', $param);
+    }
+
+    /**
+     * 签名自检探针 — POST /unipay/ping（走完整验签链路，一键判定商户号/应用/私钥/签名串是否可用）
+     *
+     * 对照契约 6.14 节（仅公共参数，无业务字段；公共字段由 [Client#execute] 注入，本仓约定参数即关联数组，故无参数对象）。
+     * 与免签名 [Client#ping] 互补：本方法由持商户私钥方发起，非 0 业务码不抛异常而是原样返回，
+     * 供调用方按 code 分类诊断（20052=验签失败且 msg 含服务端待签串；10408-10411=nonce/时钟；
+     * 其余=商户号/应用类）；响应验签失败仍抛异常（平台公钥配置问题）。
+     *
+     * @param array<string,mixed> $param 请求参数（无业务字段，传 [] 即可；公共字段缺省自动注入）
+     * @return array<string,mixed> DaxResult 关联数组；`data` 回显平台侧解析结果（供对接方核对商户身份与签名串构造）：
+     *  mchNo string 商户号 / appId string 应用号 / appFromDefault bool 是否回落平台默认应用 /
+     *  serverSignStr string 服务端待签串（与本地签名串比对可定位签名差异）
+     */
+    public function signedPing(array $param = []): array
+    {
+        return $this->execute('/unipay/ping', $param, false);
     }
 
     /**
