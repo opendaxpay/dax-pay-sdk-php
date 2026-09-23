@@ -155,7 +155,7 @@ class Client
      *  - `source` string 订单来源标识
      *  - `allocation` bool 是否分账订单（分账链路前置条件）
      * @return array<string,mixed> DaxResult；`data` 为下单结果：
-     *  orderId / bizOrderNo / orderNo / tradeNo / status（wait|progress|success|close|cancel|fail|timeout）/
+     *  bizOrderNo / orderNo / tradeNo / status（资金态：init|processing|success|fail|close|cancel）/
      *  payBody（二维码链接或调起参数或跳转 URL）/ payBodyType（code_url|pay_info|redirect_url）
      */
     public function pay(array $param): array
@@ -185,7 +185,7 @@ class Client
      *  - `bizOrderNo` string 商户订单号
      * @return array<string,mixed> DaxResult；`data` 为支付订单：
      *  bizOrderNo / orderNo / tradeNo / outOrderNo / title / description / channel / method / limitPay /
-     *  amount / realAmount / refundableBalance / status / refundStatus / provider / payTime / closeTime /
+     *  amount / currency / realAmount / refundableBalance / status / refundStatus / provider / payTime / closeTime /
      *  expiredTime / terminalNo / storeNo / buyerId / attach / errorMsg
      */
     public function queryPayOrder(array $param): array
